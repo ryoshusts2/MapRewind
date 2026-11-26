@@ -1,0 +1,48 @@
+<Project Sdk="Godot.NET.Sdk/4.5.1">
+    <Import Project=".\local.props" Condition="Exists('.\local.props')"/>
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <LangVersion>13.0</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>true</ImplicitUsings>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <EnableDynamicLoading>true</EnableDynamicLoading>
+        <RootNamespace>MapRewind</RootNamespace>
+        
+        <Sts2Dir Condition="'$(Sts2Dir)' == ''">$(MSBuildProgramFiles32)\Steam\steamapps\common\Slay the Spire 2</Sts2Dir>
+        <Sts2DataDir Condition="'$(Sts2DataDir)' == ''">$(Sts2Dir)\data_sts2_windows_x86_64</Sts2DataDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Krafs.Publicizer" Version="2.2.1" PrivateAssets="all"/>
+        <!-- 核心：让云端自动去 NuGet 下载 RitsuLib 和依赖 -->
+        <PackageReference Include="STS2.RitsuLib" Version="*" GeneratePathProperty="true"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Publicize Include="sts2" IncludeVirtualMembers="false" IncludeCompilerGeneratedMembers="false"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- 引用本地的游戏核心 DLL -->
+        <Reference Include="0Harmony" HintPath="$(Sts2DataDir)\0Harmony.dll" Private="True"/>
+        <Reference Include="sts2" HintPath="$(Sts2DataDir)\sts2.dll" Private="True"/>
+        <Reference Include="Steamworks.NET" HintPath="$(Sts2DataDir)\Steamworks.NET.dll" Private="True"/>
+        
+        <!-- 如果本地有 DLL 就用本地的，没有就用上面的 NuGet -->
+        <Reference Include="0Harmony" HintPath="./0Harmony.dll" Condition="Exists('./0Harmony.dll')" Private="True"/>
+        <Reference Include="sts2" HintPath="./sts2.dll" Condition="Exists('./sts2.dll')" Private="True"/>
+        <Reference Include="Steamworks.NET" HintPath="./Steamworks.NET.dll" Condition="Exists('./Steamworks.NET.dll')" Private="True"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- 排除不必要的文件夹 -->
+        <Compile Remove=".godot/**;.idea/**;.vs/**;bin/**;obj/**"/>
+        <None Include="MapRewind.json"/>
+    </ItemGroup>
+
+    <Target Name="ValidateSts2GameInstall" BeforeTargets="ResolveAssemblyReferences">
+        <Error Condition="!Exists('$(Sts2DataDir)\sts2.dll') and !Exists('./sts2.dll')" Text="Could not find sts2.dll. Please place sts2.dll in the root folder."/>
+    </Target>
+</Project>
