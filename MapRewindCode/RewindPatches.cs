@@ -11,7 +11,7 @@ public static class RewindPatches
     [HarmonyPostfix]
     public static void Postfix(AbstractRoom __instance, IRunState runState)
     {
-        if (runState == null) return;
+        if (__instance == null || runState == null) return;
 
         try
         {
@@ -20,8 +20,8 @@ public static class RewindPatches
             int row = mapCoord.HasValue ? mapCoord.Value.row : 0;
             int actIndex = runState.CurrentActIndex;
 
-            // 【核心修复】不再传 __instance，只传坐标。
-            RewindManager.CaptureSnapshot(actIndex, col, row);
+            // 【核心修复】把当前房间传进去
+            RewindManager.CaptureSnapshot(__instance, actIndex, col, row);
         }
         catch (System.Exception ex)
         {

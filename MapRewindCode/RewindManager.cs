@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Nodes;
+using MegaCrit.Sts2.Core.Rooms;
 using Godot;
 
 namespace MapRewind;
@@ -20,14 +21,13 @@ public static class RewindManager
 
     public static List<SnapshotData> History = new();
 
-    // 去掉 room 参数
-    public static void CaptureSnapshot(int actIndex, int col, int row)
+    public static void CaptureSnapshot(AbstractRoom room, int actIndex, int col, int row)
     {
         if (RunManager.Instance == null) return;
         try
         {
-            // 【核心修复】传 null。因为坐标已经更新，这样读档时会直接回到这个节点前的地图状态！
-            SerializableRun snapshot = RunManager.Instance.ToSave(null);
+            // 把 room 传进去，这样 PreFinishedRoom 就有值了
+            SerializableRun snapshot = RunManager.Instance.ToSave(room);
             if (snapshot != null)
             {
                 string nodeName = $"第 {actIndex + 1} 层 - 坐标({col}, {row})";
@@ -65,6 +65,10 @@ public static class RewindManager
         {
             GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
 
+            // 【核心修复】等待一帧，让旧战斗界面彻底销毁释放，防止引擎场景树报错
+            await ToSignal(Engine.GetMainLoop(), "process_frame");
+            await Task.Delay(100);
+
             RunState runState = RunState.FromSerializable(data.RunData);
             if (runState == null) 
             {
@@ -72,8 +76,8 @@ public static class RewindManager
                 return;
             }
 
-            // preFinishedRoom 传 null 表示回到地图界面
-            await NGame.Instance.LoadRun(runState, null);
+            // 此时 PreFinishedRoom 有值了，原版就不会在空指针里迷路了
+            await NGame.Instance.LoadRun(runState, data.RunData.PreFinishedRoom);
             
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
         }
