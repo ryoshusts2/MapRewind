@@ -13,10 +13,10 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '9.0.x' # 注意这里是 9.0.x，因为项目是 net9.0
+        dotnet-version: '9.0.x'
 
     - name: Build
-      run: dotnet build MapRewind.csproj -c Release /p:Sts2DataDir="./"
+      run: dotnet build MapRewind.csproj -c Release
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
