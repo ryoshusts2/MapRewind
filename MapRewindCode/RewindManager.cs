@@ -26,7 +26,6 @@ public static class RewindManager
         if (RunManager.Instance == null) return;
         try
         {
-            // 把 room 传进去，这样 PreFinishedRoom 就有值了
             SerializableRun snapshot = RunManager.Instance.ToSave(room);
             if (snapshot != null)
             {
@@ -65,18 +64,12 @@ public static class RewindManager
         {
             GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
 
-            // 【核心修复】等待一帧，让旧战斗界面彻底销毁释放，防止引擎场景树报错
-            await ToSignal(Engine.GetMainLoop(), "process_frame");
-            await Task.Delay(100);
+            // 【核心修复】用 C# 自带延迟，给引擎时间去销毁旧界面
+            await Task.Delay(150);
 
             RunState runState = RunState.FromSerializable(data.RunData);
-            if (runState == null) 
-            {
-                GD.PrintErr("[MapRewind] 回溯失败：反序列化 RunState 为空！");
-                return;
-            }
+            if (runState == null) return;
 
-            // 此时 PreFinishedRoom 有值了，原版就不会在空指针里迷路了
             await NGame.Instance.LoadRun(runState, data.RunData.PreFinishedRoom);
             
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
