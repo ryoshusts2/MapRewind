@@ -1,39 +1,37 @@
 using HarmonyLib;
-using MegaCrit.Sts2.Core.Nodes.Screens.Map;
+using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
+using MegaCrit.Sts2.Core.Combat; // 引入战斗管理器
 using Godot;
 
 namespace MapRewind;
 
-[HarmonyPatch(typeof(NMapScreen), "_Ready")]
+[HarmonyPatch(typeof(AbstractRoom), "Enter")]
 public static class RewindPatches
 {
+    // 【核心修复】改成 Postfix，等房间加载完，坐标100%刷新的瞬间再抓快照！
     [HarmonyPostfix]
-    public static void Postfix(NMapScreen __instance)
-    {
-        // 延迟执行，等地图画面彻底加载完毕再抓快照
-        __instance.CallDeferred("_DummyMethod"); // 占位，避免空方法报错
-        Callable.From(() => CaptureSnapshot()).CallDeferred();
-    }
-
-    private static void CaptureSnapshot()
+    public static void Postfix(AbstractRoom __instance)
     {
         try
         {
             if (RunManager.Instance == null) return;
 
-            SerializableRun snapshot = RunManager.Instance.ToSave(null); // 此时没有进入任何房间，传 null
+            // 如果现在处于战斗中，也可以正常存（存下的是战斗刚开始的初始状态）
+            SerializableRun snapshot = RunManager.Instance.ToSave(__instance);
+            
             if (snapshot != null)
             {
                 int actIndex = snapshot.CurrentActIndex;
-                string nodeName = $"第 {actIndex + 1} 层 - 大地图选路";
+                string roomType = __instance.GetType().Name.Replace("Room", "");
+                string nodeName = $"第 {actIndex + 1} 层 - {roomType}";
 
-                // 防止在一个地图重复存太多次
-                if (RewindManager.History.Count > 0 && RewindManager.History[^1].NodeName == nodeName && RewindManager.History[^1].ActIndex == actIndex)
+                // 防止在同一个房间疯狂存（比如读档重载的时候）
+                if (RewindManager.History.Count > 0)
                 {
-                    // 如果刚存过，就不存了，直接返回
-                    return; 
+                    var last = RewindManager.History[^1];
+                    if (last.NodeName == nodeName && last.ActIndex == actIndex) return;
                 }
 
                 RewindManager.History.Add(new RewindManager.SnapshotData
@@ -43,7 +41,7 @@ public static class RewindPatches
                     ActIndex = actIndex
                 });
 
-                GD.Print($"[MapRewind] 成功记录大地图快照: {nodeName}");
+                GD.Print($"[MapRewind] 成功记录节点快照: {nodeName}");
             }
         }
         catch (System.Exception ex)
