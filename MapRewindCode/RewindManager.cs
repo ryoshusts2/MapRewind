@@ -11,8 +11,8 @@ public static class RewindManager
 {
     public class SnapshotData
     {
-        public string NodeName;
-        public SerializableRun RunData;
+        public string NodeName = string.Empty; // <--- 修复警告
+        public SerializableRun? RunData;       // <--- 允许为空
         public int ActIndex;
     }
 
@@ -23,19 +23,18 @@ public static class RewindManager
         if (index < 0 || index >= History.Count) return;
         if (NGame.Instance == null) return;
 
+        var data = History[index];
+        if (data.RunData == null)
+        {
+            GD.PrintErr("[MapRewind] 回溯失败：快照数据为空！");
+            return;
+        }
+
         try
         {
-            var data = History[index];
             GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
             
-            // 从存档数据反序列化
             RunState runState = RunState.FromSerializable(data.RunData);
-            if (runState == null) {
-                GD.PrintErr("[MapRewind] 回溯失败：序列化数据为空！");
-                return;
-            }
-
-            // 执行底层加载（原版重武器）
             await NGame.Instance.LoadRun(runState, data.RunData.PreFinishedRoom);
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
         }
