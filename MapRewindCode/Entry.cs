@@ -1,8 +1,8 @@
+using System;
 using System.Reflection;
 using HarmonyLib;
-using MegaCrit.Sts2.Core.Logging;
+using Godot;
 using STS2RitsuLib;
-using STS2RitsuLib.Interop.AutoRegistration;
 
 namespace MapRewind;
 
@@ -10,23 +10,34 @@ public static class Entry
 {
     public const string ModId = "MapRewind";
     public static readonly string ResPath = $"res://{ModId}";
-    public static readonly Logger Logger = new Logger(ModId);
 
     public static void Init()
     {
         var assembly = Assembly.GetExecutingAssembly();
-        RitsuLibFramework.EnsureGodotScriptsRegistered(assembly, Logger);
-        ModTypeDiscoveryHub.RegisterModAssembly(ModId, assembly);
+        
+        GD.Print("[MapRewind] Initializing...");
+
+        try
+        {
+            // 传 null 即可
+            RitsuLibFramework.EnsureGodotScriptsRegistered(assembly, null);
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[MapRewind] EnsureGodotScriptsRegistered failed: {ex.Message}");
+        }
 
         try
         {
             var harmony = new Harmony(ModId);
             harmony.PatchAll(assembly);
-            Logger.Info("MapRewind initialized.");
+            GD.Print("[MapRewind] Harmony patches applied.");
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
-            Logger.Error($"MapRewind Harmony patch failed: {ex.Message}");
+            GD.PrintErr($"[MapRewind] Harmony patch failed: {ex.Message}\n{ex.StackTrace}");
         }
+
+        GD.Print("[MapRewind] initialized.");
     }
 }

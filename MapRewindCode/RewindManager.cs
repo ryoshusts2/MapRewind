@@ -1,47 +1,23 @@
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using MegaCrit.Sts2.Core.Saves; // <--- 核心修复：真正的老家在这
-using MegaCrit.Sts2.Core.Runs;  // RunState 和 RunManager 在这
-using MegaCrit.Sts2.Core.Nodes; // NGame 在这
-using Godot;
-
-namespace MapRewind;
-
-public static class RewindManager
+public static async Task RewindTo(string coordKey)
 {
-    public static Dictionary<string, SerializableRun> Snapshots = new();
-
-    public static void TakeSnapshot(string coordKey)
+    if (!Snapshots.ContainsKey(coordKey)) return;
+    
+    // 加上这个判空
+    if (NGame.Instance == null)
     {
-        if (RunManager.Instance == null) return;
-        try
-        {
-            SerializableRun snapshot = RunManager.Instance.ToSave(null);
-            if (snapshot != null)
-            {
-                Snapshots[coordKey] = snapshot;
-                GD.Print($"[MapRewind] 成功记录节点快照: {coordKey}");
-            }
-        }
-        catch (System.Exception ex)
-        {
-            GD.PrintErr($"[MapRewind] 记录快照失败: {ex.Message}");
-        }
+        GD.PrintErr("[MapRewind] NGame.Instance 为空，无法加载");
+        return;
     }
 
-    public static async Task RewindTo(string coordKey)
+    try
     {
-        if (!Snapshots.ContainsKey(coordKey)) return;
-        try
-        {
-            SerializableRun save = Snapshots[coordKey];
-            RunState runState = RunState.FromSerializable(save);
-            await NGame.Instance.LoadRun(runState, save.PreFinishedRoom);
-            GD.Print($"[MapRewind] 成功回溯到节点: {coordKey}");
-        }
-        catch (System.Exception ex)
-        {
-            GD.PrintErr($"[MapRewind] 回溯失败: {ex.Message}\n{ex.StackTrace}");
-        }
+        SerializableRun save = Snapshots[coordKey];
+        RunState runState = RunState.FromSerializable(save);
+        await NGame.Instance.LoadRun(runState, save.PreFinishedRoom);
+        GD.Print($"[MapRewind] 成功回溯到节点: {coordKey}");
+    }
+    catch (System.Exception ex)
+    {
+        GD.PrintErr($"[MapRewind] 回溯失败: {ex.Message}\n{ex.StackTrace}");
     }
 }
