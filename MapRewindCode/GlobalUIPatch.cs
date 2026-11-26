@@ -7,8 +7,9 @@ namespace MapRewind;
 [HarmonyPatch(typeof(NGame), "_Ready")]
 public static class GlobalUIPatch
 {
-    private static CanvasLayer _canvas;
-    private static Control _currentOverlay;
+    // 加上 ? 允许为空，消除警告
+    private static CanvasLayer? _canvas;
+    private static Control? _currentOverlay;
 
     [HarmonyPostfix]
     public static void Postfix(NGame __instance)
@@ -33,14 +34,13 @@ public static class GlobalUIPatch
     {
         if (RewindManager.History.Count == 0) return;
 
-        // 如果已经有一个弹窗，先干掉它，防止 UI 重叠报错
         if (_currentOverlay != null && GodotObject.IsInstanceValid(_currentOverlay))
         {
             _currentOverlay.QueueFree();
         }
 
         _currentOverlay = new ColorRect();
-        (_currentOverlay as ColorRect).Color = new Color(0, 0, 0, 0.8f);
+        (_currentOverlay as ColorRect)!.Color = new Color(0, 0, 0, 0.8f); // 加 ! 告诉编译器肯定不为空
         _currentOverlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         
         var panel = new PanelContainer();
@@ -71,7 +71,8 @@ public static class GlobalUIPatch
         hbox.AddChild(btnCancel);
         vbox.AddChild(hbox);
 
-        btnCancel.Pressed += () => _currentOverlay.QueueFree();
+        // 加上 ? 防止空引用
+        btnCancel.Pressed += () => _currentOverlay?.QueueFree();
 
         btnConfirm.Pressed += () => {
             var selected = itemList.GetSelectedItems();
@@ -80,15 +81,15 @@ public static class GlobalUIPatch
             
             var confirmDialog = new ConfirmationDialog();
             confirmDialog.DialogText = $"确定要回到 [{RewindManager.History[index].NodeName}] 吗？\n当前进度将丢失！";
-            _currentOverlay.AddChild(confirmDialog);
+            _currentOverlay?.AddChild(confirmDialog); // 加上 ?
             confirmDialog.Confirmed += () => {
-                _currentOverlay.QueueFree();
+                _currentOverlay?.QueueFree();
                 _ = RewindManager.RewindTo(index);
             };
             confirmDialog.PopupCentered();
         };
 
         _currentOverlay.AddChild(panel);
-        _canvas.AddChild(_currentOverlay);
+        _canvas?.AddChild(_currentOverlay);
     }
 }

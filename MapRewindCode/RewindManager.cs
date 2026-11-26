@@ -3,7 +3,6 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Nodes;
-using MegaCrit.Sts2.Core.Combat; // 核心战斗命名空间
 using Godot;
 
 namespace MapRewind;
@@ -31,26 +30,18 @@ public static class RewindManager
         {
             GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
 
-            // 【核心修复】如果正在战斗中，强行结束/打断当前战斗状态
-            if (CombatManager.Instance != null && CombatManager.Instance.IsInProgress)
-            {
-                GD.Print("[MapRewind] 检测到战斗中回溯，正在强行结束当前战斗...");
-                // 原版结束战斗的方法，强行让状态机退出
-                CombatManager.Instance.IsInProgress = false; 
-            }
-
-            // 清理可能会卡住的 UI 节点 (比如顶部血条、战斗界面)
+            // 删掉 IsInProgress 判断，直接尝试强杀 UI 节点
             var sceneTree = Engine.GetMainLoop() as SceneTree;
             if (sceneTree != null && sceneTree.Root != null)
             {
                 var combatRoom = sceneTree.Root.FindChild("NCombatRoom", true, false);
                 if (combatRoom != null)
                 {
-                    combatRoom.QueueFree(); // 暴力销毁战斗场景
+                    combatRoom.QueueFree(); // 摧毁战斗场景
                 }
             }
 
-            // 执行底层读档
+            // 原版读档，里面自带 SetCurrentScene，理论上会替换掉所有东西
             RunState runState = RunState.FromSerializable(data.RunData);
             await NGame.Instance.LoadRun(runState, data.RunData.PreFinishedRoom);
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
