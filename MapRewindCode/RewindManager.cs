@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Nodes;
-using MegaCrit.Sts2.Core.Rooms; // <--- 补上这个
+using MegaCrit.Sts2.Core.Rooms;
 using Godot;
 
 namespace MapRewind;
@@ -27,7 +27,9 @@ public static class RewindManager
             SerializableRun snapshot = RunManager.Instance.ToSave(null);
             if (snapshot != null)
             {
-                int actIndex = RunManager.Instance.CurrentRunState.CurrentActIndex;
+                // 直接从快照数据里读层数，不依赖 RunManager！
+                int actIndex = snapshot.CurrentActIndex;
+                
                 string roomType = room.GetType().Name.Replace("Room", "");
                 string nodeName = $"第 {actIndex + 1} 层 - {roomType}";
 
