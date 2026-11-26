@@ -20,25 +20,21 @@ public static class RewindManager
 
     public static List<SnapshotData> History = new();
 
-    public static void CaptureSnapshot()
+    // 接收传过来的参数进行保存
+    public static void CaptureSnapshot(int actIndex, int col, int row)
     {
         if (RunManager.Instance == null) return;
         try
         {
-            var runState = RunManager.Instance.CurrentRunState;
             SerializableRun snapshot = RunManager.Instance.ToSave(null);
-            
-            if (snapshot != null && runState.CurrentMapCoord.HasValue)
+            if (snapshot != null)
             {
-                var coord = runState.CurrentMapCoord.Value;
-                int actIndex = snapshot.CurrentActIndex;
-                string nodeName = $"第 {actIndex + 1} 层";
+                string nodeName = $"第 {actIndex + 1} 层 - 坐标({col}, {row})";
 
-                // 防止重复存
                 if (History.Count > 0)
                 {
                     var last = History[^1];
-                    if (last.Col == coord.col && last.Row == coord.row && last.ActIndex == actIndex) return;
+                    if (last.Col == col && last.Row == row && last.ActIndex == actIndex) return;
                 }
 
                 History.Add(new SnapshotData
@@ -46,10 +42,10 @@ public static class RewindManager
                     NodeName = nodeName,
                     RunData = snapshot,
                     ActIndex = actIndex,
-                    Col = coord.col,
-                    Row = coord.row
+                    Col = col,
+                    Row = row
                 });
-                GD.Print($"[MapRewind] 成功记录节点: {nodeName}, 坐标 ({coord.col}, {coord.row})");
+                GD.Print($"[MapRewind] 成功记录: {nodeName}");
             }
         }
         catch (System.Exception ex)
@@ -68,12 +64,9 @@ public static class RewindManager
 
         try
         {
-            GD.Print($"[MapRewind] 准备回溯到: {data.NodeName} ({data.Col}, {data.Row})");
-
-            // 【核心修复】不在这里 QueueFree 任何 UI 节点。直接让原版场景树去接管清理！
+            GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
             RunState runState = RunState.FromSerializable(data.RunData);
             await NGame.Instance.LoadRun(runState, data.RunData.PreFinishedRoom);
-            
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
         }
         catch (System.Exception ex)
