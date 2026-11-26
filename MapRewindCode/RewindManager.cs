@@ -3,13 +3,14 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Nodes;
+using MegaCrit.Sts2.Core.Rooms; // <--- 补上这个
 using Godot;
 
 namespace MapRewind;
 
 public class SnapshotData
 {
-    public string NodeName; // 比如 "第1层 - 战斗"
+    public string NodeName;
     public SerializableRun RunData;
     public int ActIndex;
 }
@@ -28,7 +29,6 @@ public static class RewindManager
             {
                 int actIndex = RunManager.Instance.CurrentRunState.CurrentActIndex;
                 string roomType = room.GetType().Name.Replace("Room", "");
-                
                 string nodeName = $"第 {actIndex + 1} 层 - {roomType}";
 
                 History.Add(new SnapshotData

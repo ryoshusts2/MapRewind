@@ -1,46 +1,46 @@
-using System.Linq;
+using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Nodes;
-using Godot;
+using MegaCrit.Sts2.Core.Rooms;
 
 namespace MapRewind;
 
-// 拦截暂停菜单的初始化
-[HarmonyPatch(typeof(NPauseMenu), "_Ready")]
-public static class PauseMenuPatch
+// 我们直接拦截游戏的全局初始化类 NGame
+[HarmonyPatch(typeof(NGame), "_Ready")]
+public static class GlobalUIPatch
 {
     [HarmonyPostfix]
-    public static void Postfix(NPauseMenu __instance)
+    public static void Postfix(NGame __instance)
     {
-        // 防止重复添加
-        if (__instance.HasNode("MapRewindButton")) return;
+        // 防止重复加载
+        if (__instance.HasNode("MapRewindUI")) return;
 
-        Button rewindBtn = new Button();
-        rewindBtn.Name = "MapRewindButton";
-        rewindBtn.Text = "时光回溯 (Map Rewind)";
-        rewindBtn.CustomMinimumSize = new Vector2(250, 50);
-        
-        // 这里用绝对位置占个位，一般原版菜单在屏幕左侧
-        rewindBtn.Position = new Vector2(50, 300); 
+        // 创建一个 UI 画布层，保证悬浮在所有画面之上
+        var canvas = new CanvasLayer();
+        canvas.Name = "MapRewindUI";
+        __instance.AddChild(canvas);
 
-        // 点击打开自定义弹窗
-        rewindBtn.Pressed += () => {
-            ShowHistoryPopup(__instance);
-        };
+        // 创建一个悬浮按钮
+        var btn = new Button();
+        btn.Text = "时光倒流";
+        btn.Position = new Vector2(20, 150); // 放在左上角偏下的位置
+        btn.CustomMinimumSize = new Vector2(120, 50);
+        canvas.AddChild(btn);
 
-        __instance.AddChild(rewindBtn);
-        GD.Print("[MapRewind] 成功将按钮注入暂停菜单！");
+        btn.Pressed += () => ShowHistoryPopup(canvas);
+        GD.Print("[MapRewind] 全局时光倒流按钮已注入！");
     }
 
-    private static void ShowHistoryPopup(NPauseMenu parent)
+    private static void ShowHistoryPopup(CanvasLayer canvas)
     {
         if (RewindManager.History.Count == 0) return;
 
-        // 创建一个覆盖全屏的面板
+        // 半透明背景
         var overlay = new ColorRect();
         overlay.Color = new Color(0, 0, 0, 0.8f);
         overlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         
+        // 居中面板
         var panel = new PanelContainer();
         panel.SetAnchorsPreset(Control.LayoutPreset.Center);
         panel.CustomMinimumSize = new Vector2(600, 400);
@@ -48,13 +48,11 @@ public static class PauseMenuPatch
         var vbox = new VBoxContainer();
         panel.AddChild(vbox);
 
-        // 标题
         var title = new Label();
         title.Text = "选择你要回溯的历史节点";
         title.HorizontalAlignment = HorizontalAlignment.Center;
         vbox.AddChild(title);
 
-        // 历史列表
         var itemList = new ItemList();
         itemList.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         for (int i = 0; i < RewindManager.History.Count; i++)
@@ -64,7 +62,6 @@ public static class PauseMenuPatch
         }
         vbox.AddChild(itemList);
 
-        // 按钮横排
         var hbox = new HBoxContainer();
         var btnConfirm = new Button() { Text = "回溯" };
         var btnCancel = new Button() { Text = "取消" };
@@ -72,16 +69,14 @@ public static class PauseMenuPatch
         hbox.AddChild(btnCancel);
         vbox.AddChild(hbox);
 
-        // 取消事件
         btnCancel.Pressed += () => overlay.QueueFree();
 
-        // 确认事件（二次确认）
         btnConfirm.Pressed += () => {
             var selected = itemList.GetSelectedItems();
             if (selected.Length == 0) return;
             int index = (int)itemList.GetItemMetadata(selected[0].Index);
             
-            // 再次确认
+            // 二次确认
             var confirmDialog = new ConfirmationDialog();
             confirmDialog.DialogText = $"确定要回到 [{RewindManager.History[index].NodeName}] 吗？\n当前进度将丢失！";
             overlay.AddChild(confirmDialog);
@@ -93,6 +88,6 @@ public static class PauseMenuPatch
         };
 
         overlay.AddChild(panel);
-        parent.AddChild(overlay);
+        canvas.AddChild(overlay);
     }
 }
