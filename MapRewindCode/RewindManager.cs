@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Saves;
@@ -6,52 +5,63 @@ using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Nodes;
 using Godot;
 
-namespace MapRewind
-{
-    public static class RewindManager
-    {
-        public static Dictionary<string, SerializableRun> Snapshots = new Dictionary<string, SerializableRun>();
+namespace MapRewind;
 
-        public static void TakeSnapshot(string coordKey)
+public class SnapshotData
+{
+    public string NodeName; // 比如 "第1层 - 战斗"
+    public SerializableRun RunData;
+    public int ActIndex;
+}
+
+public static class RewindManager
+{
+    public static List<SnapshotData> History = new();
+
+    public static void TakeSnapshot(AbstractRoom room)
+    {
+        if (RunManager.Instance == null) return;
+        try
         {
-            if (RunManager.Instance == null) return;
-            
-            try
+            SerializableRun snapshot = RunManager.Instance.ToSave(null);
+            if (snapshot != null)
             {
-                SerializableRun snapshot = RunManager.Instance.ToSave(null);
-                if (snapshot != null)
+                int actIndex = RunManager.Instance.CurrentRunState.CurrentActIndex;
+                string roomType = room.GetType().Name.Replace("Room", "");
+                
+                string nodeName = $"第 {actIndex + 1} 层 - {roomType}";
+
+                History.Add(new SnapshotData
                 {
-                    Snapshots[coordKey] = snapshot;
-                    GD.Print("[MapRewind] 成功记录节点快照: " + coordKey);
-                }
-            }
-            catch (Exception ex)
-            {
-                GD.PrintErr("[MapRewind] 记录快照失败: " + ex.Message);
+                    NodeName = nodeName,
+                    RunData = snapshot,
+                    ActIndex = actIndex
+                });
+
+                GD.Print($"[MapRewind] 成功记录快照: {nodeName}");
             }
         }
-
-        public static async Task RewindTo(string coordKey)
+        catch (System.Exception ex)
         {
-            if (!Snapshots.ContainsKey(coordKey)) return;
-            
-            if (NGame.Instance == null)
-            {
-                GD.PrintErr("[MapRewind] NGame.Instance 为空，无法加载");
-                return;
-            }
+            GD.PrintErr($"[MapRewind] 记录快照失败: {ex.Message}");
+        }
+    }
 
-            try
-            {
-                SerializableRun save = Snapshots[coordKey];
-                RunState runState = RunState.FromSerializable(save);
-                await NGame.Instance.LoadRun(runState, save.PreFinishedRoom);
-                GD.Print("[MapRewind] 成功回溯到节点: " + coordKey);
-            }
-            catch (Exception ex)
-            {
-                GD.PrintErr("[MapRewind] 回溯失败: " + ex.Message + "\n" + ex.StackTrace);
-            }
+    public static async Task RewindTo(int index)
+    {
+        if (index < 0 || index >= History.Count) return;
+        if (NGame.Instance == null) return;
+
+        try
+        {
+            var data = History[index];
+            RunState runState = RunState.FromSerializable(data.RunData);
+            await NGame.Instance.LoadRun(runState, data.RunData.PreFinishedRoom);
+            GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
+        }
+        catch (System.Exception ex)
+        {
+            GD.PrintErr($"[MapRewind] 回溯失败: {ex.Message}\n{ex.StackTrace}");
         }
     }
 }
