@@ -8,11 +8,10 @@ namespace MapRewind;
 [HarmonyPatch(typeof(AbstractRoom), "Enter")]
 public static class RewindPatches
 {
-    // 【核心修复】改成 Postfix，此时坐标完美，且房间加载完毕
     [HarmonyPostfix]
     public static void Postfix(AbstractRoom __instance, IRunState runState)
     {
-        if (__instance == null || runState == null) return;
+        if (runState == null) return;
 
         try
         {
@@ -21,8 +20,8 @@ public static class RewindPatches
             int row = mapCoord.HasValue ? mapCoord.Value.row : 0;
             int actIndex = runState.CurrentActIndex;
 
-            // 把当前房间 __instance 传进去！
-            RewindManager.CaptureSnapshot(__instance, actIndex, col, row);
+            // 【核心修复】不再传 __instance，只传坐标。
+            RewindManager.CaptureSnapshot(actIndex, col, row);
         }
         catch (System.Exception ex)
         {

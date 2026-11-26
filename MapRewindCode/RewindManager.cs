@@ -3,7 +3,6 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Nodes;
-using MegaCrit.Sts2.Core.Rooms; // 引入房间命名空间
 using Godot;
 
 namespace MapRewind;
@@ -21,14 +20,14 @@ public static class RewindManager
 
     public static List<SnapshotData> History = new();
 
-    // 增加 room 参数
-    public static void CaptureSnapshot(AbstractRoom room, int actIndex, int col, int row)
+    // 去掉 room 参数
+    public static void CaptureSnapshot(int actIndex, int col, int row)
     {
         if (RunManager.Instance == null) return;
         try
         {
-            // 【核心修复】把 room 传进 ToSave 里，这样才有 PreFinishedRoom
-            SerializableRun snapshot = RunManager.Instance.ToSave(room);
+            // 【核心修复】传 null。因为坐标已经更新，这样读档时会直接回到这个节点前的地图状态！
+            SerializableRun snapshot = RunManager.Instance.ToSave(null);
             if (snapshot != null)
             {
                 string nodeName = $"第 {actIndex + 1} 层 - 坐标({col}, {row})";
@@ -73,8 +72,8 @@ public static class RewindManager
                 return;
             }
 
-            // 现在 data.RunData.PreFinishedRoom 一定有值了
-            await NGame.Instance.LoadRun(runState, data.RunData.PreFinishedRoom);
+            // preFinishedRoom 传 null 表示回到地图界面
+            await NGame.Instance.LoadRun(runState, null);
             
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
         }
