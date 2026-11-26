@@ -17,9 +17,10 @@ public static class GlobalUIPatch
         __instance.AddChild(canvas);
 
         var btn = new Button();
-        btn.Text = "时光倒流";
+        // 【修改】中二台词！
+        btn.Text = "春秋蝉大人！"; 
         btn.Position = new Vector2(20, 150); 
-        btn.CustomMinimumSize = new Vector2(120, 50);
+        btn.CustomMinimumSize = new Vector2(150, 50);
         canvas.AddChild(btn);
 
         btn.Pressed += () => ShowHistoryPopup(canvas);
@@ -42,7 +43,7 @@ public static class GlobalUIPatch
         panel.AddChild(vbox);
 
         var title = new Label();
-        title.Text = "选择你要回溯的历史节点";
+        title.Text = "春秋蝉大人，你还要我等到什么时候！";
         title.HorizontalAlignment = HorizontalAlignment.Center;
         vbox.AddChild(title);
 
@@ -67,14 +68,13 @@ public static class GlobalUIPatch
         btnConfirm.Pressed += () => {
             var selected = itemList.GetSelectedItems();
             if (selected.Length == 0) return;
-            
-            // 修复点：Godot 4 里 GetSelectedItems() 返回的就是 int[]
             int index = (int)itemList.GetItemMetadata(selected[0]);
             
             var confirmDialog = new ConfirmationDialog();
             confirmDialog.DialogText = $"确定要回到 [{RewindManager.History[index].NodeName}] 吗？\n当前进度将丢失！";
             overlay.AddChild(confirmDialog);
             confirmDialog.Confirmed += () => {
+                // 先关掉弹窗，再执行回溯
                 overlay.QueueFree();
                 _ = RewindManager.RewindTo(index);
             };

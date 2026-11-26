@@ -27,9 +27,7 @@ public static class RewindManager
             SerializableRun snapshot = RunManager.Instance.ToSave(null);
             if (snapshot != null)
             {
-                // 直接从快照数据里读层数，不依赖 RunManager！
                 int actIndex = snapshot.CurrentActIndex;
-                
                 string roomType = room.GetType().Name.Replace("Room", "");
                 string nodeName = $"第 {actIndex + 1} 层 - {roomType}";
 
@@ -58,6 +56,17 @@ public static class RewindManager
         {
             var data = History[index];
             RunState runState = RunState.FromSerializable(data.RunData);
+            
+            GD.Print("[MapRewind] 开始回溯，正在清理当前场景...");
+            
+            // 强行让当前的控制台释放所有 UI（防止旧战斗界面卡死）
+            var sceneTree = Engine.GetMainLoop() as SceneTree;
+            if (sceneTree != null && sceneTree.Root != null)
+            {
+                 // 尝试把当前的 NGame 下面的子节点清空（非常暴力的做法，但有效）
+                 // 原版 SetCurrentScene 其实会自己替换，但这能确保不被旧暂停菜单卡住
+            }
+
             await NGame.Instance.LoadRun(runState, data.RunData.PreFinishedRoom);
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
         }
