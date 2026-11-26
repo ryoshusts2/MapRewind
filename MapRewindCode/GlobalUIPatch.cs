@@ -7,33 +7,41 @@ namespace MapRewind;
 [HarmonyPatch(typeof(NGame), "_Ready")]
 public static class GlobalUIPatch
 {
+    private static CanvasLayer _canvas;
+    private static Control _currentOverlay;
+
     [HarmonyPostfix]
     public static void Postfix(NGame __instance)
     {
         if (__instance.HasNode("MapRewindUI")) return;
 
-        var canvas = new CanvasLayer();
-        canvas.Name = "MapRewindUI";
-        __instance.AddChild(canvas);
+        _canvas = new CanvasLayer();
+        _canvas.Name = "MapRewindUI";
+        __instance.AddChild(_canvas);
 
         var btn = new Button();
-        // 【修改】中二台词！
         btn.Text = "春秋蝉大人！"; 
         btn.Position = new Vector2(20, 150); 
         btn.CustomMinimumSize = new Vector2(150, 50);
-        canvas.AddChild(btn);
+        _canvas.AddChild(btn);
 
-        btn.Pressed += () => ShowHistoryPopup(canvas);
+        btn.Pressed += ShowHistoryPopup;
         GD.Print("[MapRewind] 全局时光倒流按钮已注入！");
     }
 
-    private static void ShowHistoryPopup(CanvasLayer canvas)
+    private static void ShowHistoryPopup()
     {
         if (RewindManager.History.Count == 0) return;
 
-        var overlay = new ColorRect();
-        overlay.Color = new Color(0, 0, 0, 0.8f);
-        overlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        // 如果已经有一个弹窗，先干掉它，防止 UI 重叠报错
+        if (_currentOverlay != null && GodotObject.IsInstanceValid(_currentOverlay))
+        {
+            _currentOverlay.QueueFree();
+        }
+
+        _currentOverlay = new ColorRect();
+        (_currentOverlay as ColorRect).Color = new Color(0, 0, 0, 0.8f);
+        _currentOverlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         
         var panel = new PanelContainer();
         panel.SetAnchorsPreset(Control.LayoutPreset.Center);
@@ -63,7 +71,7 @@ public static class GlobalUIPatch
         hbox.AddChild(btnCancel);
         vbox.AddChild(hbox);
 
-        btnCancel.Pressed += () => overlay.QueueFree();
+        btnCancel.Pressed += () => _currentOverlay.QueueFree();
 
         btnConfirm.Pressed += () => {
             var selected = itemList.GetSelectedItems();
@@ -72,16 +80,15 @@ public static class GlobalUIPatch
             
             var confirmDialog = new ConfirmationDialog();
             confirmDialog.DialogText = $"确定要回到 [{RewindManager.History[index].NodeName}] 吗？\n当前进度将丢失！";
-            overlay.AddChild(confirmDialog);
+            _currentOverlay.AddChild(confirmDialog);
             confirmDialog.Confirmed += () => {
-                // 先关掉弹窗，再执行回溯
-                overlay.QueueFree();
+                _currentOverlay.QueueFree();
                 _ = RewindManager.RewindTo(index);
             };
             confirmDialog.PopupCentered();
         };
 
-        overlay.AddChild(panel);
-        canvas.AddChild(overlay);
+        _currentOverlay.AddChild(panel);
+        _canvas.AddChild(_currentOverlay);
     }
 }

@@ -11,8 +11,8 @@ public static class RewindManager
 {
     public class SnapshotData
     {
-        public string NodeName = string.Empty; // <--- 修复警告
-        public SerializableRun? RunData;       // <--- 允许为空
+        public string NodeName = string.Empty;
+        public SerializableRun? RunData;
         public int ActIndex;
     }
 
@@ -33,7 +33,6 @@ public static class RewindManager
         try
         {
             GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
-            
             RunState runState = RunState.FromSerializable(data.RunData);
             await NGame.Instance.LoadRun(runState, data.RunData.PreFinishedRoom);
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
