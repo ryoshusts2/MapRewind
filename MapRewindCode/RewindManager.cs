@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Nodes;
+using MegaCrit.Sts2.Core.Rooms; // 引入房间命名空间
 using Godot;
 
 namespace MapRewind;
@@ -20,12 +21,14 @@ public static class RewindManager
 
     public static List<SnapshotData> History = new();
 
-    public static void CaptureSnapshot(int actIndex, int col, int row)
+    // 增加 room 参数
+    public static void CaptureSnapshot(AbstractRoom room, int actIndex, int col, int row)
     {
         if (RunManager.Instance == null) return;
         try
         {
-            SerializableRun snapshot = RunManager.Instance.ToSave(null);
+            // 【核心修复】把 room 传进 ToSave 里，这样才有 PreFinishedRoom
+            SerializableRun snapshot = RunManager.Instance.ToSave(room);
             if (snapshot != null)
             {
                 string nodeName = $"第 {actIndex + 1} 层 - 坐标({col}, {row})";
@@ -53,7 +56,6 @@ public static class RewindManager
         }
     }
 
-    // 改成 async Task，彻底抛弃 ProcessFrame 的野路子
     public static async Task RewindTo(int index)
     {
         if (index < 0 || index >= History.Count) return;
@@ -64,10 +66,14 @@ public static class RewindManager
         {
             GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
 
-            // 不加任何 QueueFree，直接反序列化，让原版自己去替换场景
             RunState runState = RunState.FromSerializable(data.RunData);
-            
-            // 执行原版读档
+            if (runState == null) 
+            {
+                GD.PrintErr("[MapRewind] 回溯失败：反序列化 RunState 为空！");
+                return;
+            }
+
+            // 现在 data.RunData.PreFinishedRoom 一定有值了
             await NGame.Instance.LoadRun(runState, data.RunData.PreFinishedRoom);
             
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");

@@ -8,22 +8,21 @@ namespace MapRewind;
 [HarmonyPatch(typeof(AbstractRoom), "Enter")]
 public static class RewindPatches
 {
-    // 用 IRunState 接收参数，直接拿到玩家坐标
-    [HarmonyPrefix]
-    public static void Prefix(IRunState runState)
+    // 【核心修复】改成 Postfix，此时坐标完美，且房间加载完毕
+    [HarmonyPostfix]
+    public static void Postfix(AbstractRoom __instance, IRunState runState)
     {
-        if (runState == null) return;
+        if (__instance == null || runState == null) return;
 
         try
         {
-            // 拿到当前坐标
             var mapCoord = runState.CurrentMapCoord;
             int col = mapCoord.HasValue ? mapCoord.Value.col : 0;
             int row = mapCoord.HasValue ? mapCoord.Value.row : 0;
             int actIndex = runState.CurrentActIndex;
 
-            // 存快照
-            RewindManager.CaptureSnapshot(actIndex, col, row);
+            // 把当前房间 __instance 传进去！
+            RewindManager.CaptureSnapshot(__instance, actIndex, col, row);
         }
         catch (System.Exception ex)
         {
