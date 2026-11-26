@@ -3,9 +3,11 @@ using System.Reflection;
 using HarmonyLib;
 using Godot;
 using STS2RitsuLib;
+using STS2RitsuLib.Interop.AutoRegistration; // 确保有这个
 
 namespace MapRewind;
 
+[ModInitializer(nameof(Init))] // 加上这个标签！
 public static class Entry
 {
     public const string ModId = "MapRewind";
@@ -19,7 +21,6 @@ public static class Entry
 
         try
         {
-            // 传 null 即可
             RitsuLibFramework.EnsureGodotScriptsRegistered(assembly, null);
         }
         catch (Exception ex)
