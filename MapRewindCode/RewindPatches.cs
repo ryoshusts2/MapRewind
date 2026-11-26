@@ -5,17 +5,22 @@ using Godot;
 
 namespace MapRewind;
 
-[HarmonyPatch(typeof(RunManager), "OnRoomEntered")]
+// 拦截所有房间的基类：AbstractRoom 的 Enter 方法
+[HarmonyPatch(typeof(AbstractRoom), "Enter")]
 public static class RewindPatches
 {
     [HarmonyPrefix]
-    public static void Prefix(AbstractRoom room)
+    public static void Prefix(AbstractRoom __instance, RunState state, bool isRestoringRoomStackBase)
     {
-        // 每次进新房间，强行抓取一次快照！
-        // 用当前时间戳作为坐标Key，确保唯一
-        string coordKey = $"Room_{System.DateTime.Now.Ticks}";
-        
-        RewindManager.TakeSnapshot(coordKey);
-        GD.Print($"[MapRewind] 补丁触发，进入房间，自动保存快照: {coordKey}");
+        // isRestoringRoomStackBase 为 true 代表这是读档/回溯恢复的过程，防止死循环
+        if (!isRestoringRoomStackBase)
+        {
+            string coordKey = $"Room_{System.DateTime.Now.Ticks}";
+            
+            // 记录快照
+            RewindManager.TakeSnapshot(coordKey);
+            
+            GD.Print($"[MapRewind] 补丁触发，进入房间 {__instance.GetType().Name}，自动保存快照: {coordKey}");
+        }
     }
 }
