@@ -20,7 +20,6 @@ public static class RewindManager
 
     public static List<SnapshotData> History = new();
 
-    // 接收传过来的参数进行保存
     public static void CaptureSnapshot(int actIndex, int col, int row)
     {
         if (RunManager.Instance == null) return;
@@ -54,24 +53,50 @@ public static class RewindManager
         }
     }
 
-    public static async Task RewindTo(int index)
+    public static void RewindTo(int index)
     {
         if (index < 0 || index >= History.Count) return;
-        if (NGame.Instance == null) return;
-
         var data = History[index];
         if (data.RunData == null) return;
 
+        GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
+
+        // 【核心修复】在清理场景前，先等待一帧，防止 UI 节点锁死
+        var tree = Engine.GetMainLoop() as SceneTree;
+        if (tree != null)
+        {
+            // 延迟执行 DoRewind
+            tree.ProcessFrame += () => DoRewind(data);
+        }
+    }
+
+    private static async void DoRewind(SnapshotData data)
+    {
         try
         {
-            GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
+            if (data.RunData == null || NGame.Instance == null) return;
+
+            // 强行销毁当前关卡残留的根节点
+            var sceneTree = Engine.GetMainLoop() as SceneTree;
+            if (sceneTree != null && sceneTree.Root != null)
+            {
+                var combatRoom = sceneTree.Root.FindChild("NCombatRoom", true, false);
+                if (combatRoom != null) combatRoom.QueueFree();
+
+                var mapScreen = sceneTree.Root.FindChild("NMapScreen", true, false);
+                if (mapScreen != null) mapScreen.QueueFree();
+            }
+
             RunState runState = RunState.FromSerializable(data.RunData);
+            
+            // 执行原版读档
             await NGame.Instance.LoadRun(runState, data.RunData.PreFinishedRoom);
+            
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
         }
         catch (System.Exception ex)
         {
-            GD.PrintErr($"[MapRewind] 回溯过程发生异常: {ex.Message}\n{ex.StackTrace}");
+            GD.PrintErr($"[MapRewind] 回溯异常: {ex.Message}\n{ex.StackTrace}");
         }
     }
 }

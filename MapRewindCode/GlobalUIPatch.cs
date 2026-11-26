@@ -26,7 +26,7 @@ public static class GlobalUIPatch
         btn.CustomMinimumSize = new Vector2(150, 50);
         _canvas.AddChild(btn);
 
-        btn.Pressed += ShowHistoryMap; // 改名为打开地图
+        btn.Pressed += ShowHistoryMap; 
         GD.Print("[MapRewind] 全局按钮已注入！");
     }
 
@@ -41,10 +41,9 @@ public static class GlobalUIPatch
         ((ColorRect)_currentOverlay).Color = new Color(0, 0, 0, 0.9f);
         _currentOverlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         
-        // 居中的面板
         var panel = new PanelContainer();
         panel.SetAnchorsPreset(Control.LayoutPreset.Center);
-        panel.CustomMinimumSize = new Vector2(800, 600); // 加大尺寸显示地图
+        panel.CustomMinimumSize = new Vector2(800, 600); 
         
         var vbox = new VBoxContainer();
         panel.AddChild(vbox);
@@ -54,20 +53,17 @@ public static class GlobalUIPatch
         title.HorizontalAlignment = HorizontalAlignment.Center;
         vbox.AddChild(title);
 
-        // 【核心】用 Grid 排列地图节点
         var grid = new GridContainer();
-        grid.Columns = 7; // 原版地图通常是 7 列
+        grid.Columns = 7; 
         grid.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         vbox.AddChild(grid);
 
-        // 获取当前层所有快照，并按行/列排序
         var currentActIndex = RewindManager.History[0].ActIndex;
         var actSnapshots = RewindManager.History.Where(h => h.ActIndex == currentActIndex)
             .OrderBy(h => h.Row).ThenBy(h => h.Col).ToList();
 
         int maxRow = actSnapshots.Count > 0 ? actSnapshots.Max(h => h.Row) : 0;
         
-        // 简单粗暴地画满网格
         for (int r = 0; r <= maxRow; r++)
         {
             for (int c = 0; c < 7; c++)
@@ -75,11 +71,10 @@ public static class GlobalUIPatch
                 var snap = actSnapshots.FirstOrDefault(h => h.Row == r && h.Col == c);
                 if (snap != null)
                 {
-                    // 有快照的节点，画个发光按钮
                     var nodeBtn = new Button();
-                    nodeBtn.Text = $"{r}-{c}"; // 暂时显示坐标
+                    nodeBtn.Text = $"{r}-{c}"; 
                     nodeBtn.CustomMinimumSize = new Vector2(80, 80);
-                    nodeBtn.Modulate = new Color(1, 0.8f, 0.2f); // 金色
+                    nodeBtn.Modulate = new Color(1, 0.8f, 0.2f); 
                     
                     var snapIndex = RewindManager.History.IndexOf(snap);
                     nodeBtn.Pressed += () => ShowConfirmDialog(snapIndex);
@@ -87,7 +82,6 @@ public static class GlobalUIPatch
                 }
                 else
                 {
-                    // 没有快照的空位置
                     var empty = new Control();
                     empty.CustomMinimumSize = new Vector2(80, 80);
                     grid.AddChild(empty);
@@ -109,8 +103,9 @@ public static class GlobalUIPatch
         confirmDialog.DialogText = $"确定要回到 [{RewindManager.History[index].NodeName}] 吗？";
         _currentOverlay?.AddChild(confirmDialog);
         confirmDialog.Confirmed += () => {
-            // 注意：这里不调用 QueueFree，因为读档会自动清空整个场景
-            _ = RewindManager.RewindTo(index);
+            // 【核心修复】必须先用 QueueFree 销毁我们当前的 UI，防止它在读档时崩溃！
+            _currentOverlay?.QueueFree();
+            RewindManager.RewindTo(index);
         };
         confirmDialog.PopupCentered();
     }
