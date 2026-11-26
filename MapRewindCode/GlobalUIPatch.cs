@@ -1,13 +1,13 @@
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Nodes;
+using System.Linq;
 
 namespace MapRewind;
 
 [HarmonyPatch(typeof(NGame), "_Ready")]
 public static class GlobalUIPatch
 {
-    // 加上 ? 允许为空，消除警告
     private static CanvasLayer? _canvas;
     private static Control? _currentOverlay;
 
@@ -26,26 +26,25 @@ public static class GlobalUIPatch
         btn.CustomMinimumSize = new Vector2(150, 50);
         _canvas.AddChild(btn);
 
-        btn.Pressed += ShowHistoryPopup;
-        GD.Print("[MapRewind] 全局时光倒流按钮已注入！");
+        btn.Pressed += ShowHistoryMap; // 改名为打开地图
+        GD.Print("[MapRewind] 全局按钮已注入！");
     }
 
-    private static void ShowHistoryPopup()
+    private static void ShowHistoryMap()
     {
         if (RewindManager.History.Count == 0) return;
 
         if (_currentOverlay != null && GodotObject.IsInstanceValid(_currentOverlay))
-        {
             _currentOverlay.QueueFree();
-        }
 
         _currentOverlay = new ColorRect();
-        (_currentOverlay as ColorRect)!.Color = new Color(0, 0, 0, 0.8f); // 加 ! 告诉编译器肯定不为空
+        ((ColorRect)_currentOverlay).Color = new Color(0, 0, 0, 0.9f);
         _currentOverlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         
+        // 居中的面板
         var panel = new PanelContainer();
         panel.SetAnchorsPreset(Control.LayoutPreset.Center);
-        panel.CustomMinimumSize = new Vector2(600, 400);
+        panel.CustomMinimumSize = new Vector2(800, 600); // 加大尺寸显示地图
         
         var vbox = new VBoxContainer();
         panel.AddChild(vbox);
@@ -55,41 +54,64 @@ public static class GlobalUIPatch
         title.HorizontalAlignment = HorizontalAlignment.Center;
         vbox.AddChild(title);
 
-        var itemList = new ItemList();
-        itemList.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        for (int i = 0; i < RewindManager.History.Count; i++)
+        // 【核心】用 Grid 排列地图节点
+        var grid = new GridContainer();
+        grid.Columns = 7; // 原版地图通常是 7 列
+        grid.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        vbox.AddChild(grid);
+
+        // 获取当前层所有快照，并按行/列排序
+        var currentActIndex = RewindManager.History[0].ActIndex;
+        var actSnapshots = RewindManager.History.Where(h => h.ActIndex == currentActIndex)
+            .OrderBy(h => h.Row).ThenBy(h => h.Col).ToList();
+
+        int maxRow = actSnapshots.Count > 0 ? actSnapshots.Max(h => h.Row) : 0;
+        
+        // 简单粗暴地画满网格
+        for (int r = 0; r <= maxRow; r++)
         {
-            itemList.AddItem(RewindManager.History[i].NodeName, null, true);
-            itemList.SetItemMetadata(i, i);
+            for (int c = 0; c < 7; c++)
+            {
+                var snap = actSnapshots.FirstOrDefault(h => h.Row == r && h.Col == c);
+                if (snap != null)
+                {
+                    // 有快照的节点，画个发光按钮
+                    var nodeBtn = new Button();
+                    nodeBtn.Text = $"{r}-{c}"; // 暂时显示坐标
+                    nodeBtn.CustomMinimumSize = new Vector2(80, 80);
+                    nodeBtn.Modulate = new Color(1, 0.8f, 0.2f); // 金色
+                    
+                    var snapIndex = RewindManager.History.IndexOf(snap);
+                    nodeBtn.Pressed += () => ShowConfirmDialog(snapIndex);
+                    grid.AddChild(nodeBtn);
+                }
+                else
+                {
+                    // 没有快照的空位置
+                    var empty = new Control();
+                    empty.CustomMinimumSize = new Vector2(80, 80);
+                    grid.AddChild(empty);
+                }
+            }
         }
-        vbox.AddChild(itemList);
 
-        var hbox = new HBoxContainer();
-        var btnConfirm = new Button() { Text = "回溯" };
-        var btnCancel = new Button() { Text = "取消" };
-        hbox.AddChild(btnConfirm);
-        hbox.AddChild(btnCancel);
-        vbox.AddChild(hbox);
-
-        // 加上 ? 防止空引用
-        btnCancel.Pressed += () => _currentOverlay?.QueueFree();
-
-        btnConfirm.Pressed += () => {
-            var selected = itemList.GetSelectedItems();
-            if (selected.Length == 0) return;
-            int index = (int)itemList.GetItemMetadata(selected[0]);
-            
-            var confirmDialog = new ConfirmationDialog();
-            confirmDialog.DialogText = $"确定要回到 [{RewindManager.History[index].NodeName}] 吗？\n当前进度将丢失！";
-            _currentOverlay?.AddChild(confirmDialog); // 加上 ?
-            confirmDialog.Confirmed += () => {
-                _currentOverlay?.QueueFree();
-                _ = RewindManager.RewindTo(index);
-            };
-            confirmDialog.PopupCentered();
-        };
+        var btnClose = new Button() { Text = "关闭地图" };
+        btnClose.Pressed += () => _currentOverlay?.QueueFree();
+        vbox.AddChild(btnClose);
 
         _currentOverlay.AddChild(panel);
         _canvas?.AddChild(_currentOverlay);
+    }
+
+    private static void ShowConfirmDialog(int index)
+    {
+        var confirmDialog = new ConfirmationDialog();
+        confirmDialog.DialogText = $"确定要回到 [{RewindManager.History[index].NodeName}] 吗？";
+        _currentOverlay?.AddChild(confirmDialog);
+        confirmDialog.Confirmed += () => {
+            // 注意：这里不调用 QueueFree，因为读档会自动清空整个场景
+            _ = RewindManager.RewindTo(index);
+        };
+        confirmDialog.PopupCentered();
     }
 }
