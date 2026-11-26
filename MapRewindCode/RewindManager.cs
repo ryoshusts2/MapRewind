@@ -53,40 +53,18 @@ public static class RewindManager
         }
     }
 
-    public static void RewindTo(int index)
+    // 改成 async Task，彻底抛弃 ProcessFrame 的野路子
+    public static async Task RewindTo(int index)
     {
         if (index < 0 || index >= History.Count) return;
         var data = History[index];
-        if (data.RunData == null) return;
+        if (data.RunData == null || NGame.Instance == null) return;
 
-        GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
-
-        // 【核心修复】在清理场景前，先等待一帧，防止 UI 节点锁死
-        var tree = Engine.GetMainLoop() as SceneTree;
-        if (tree != null)
-        {
-            // 延迟执行 DoRewind
-            tree.ProcessFrame += () => DoRewind(data);
-        }
-    }
-
-    private static async void DoRewind(SnapshotData data)
-    {
         try
         {
-            if (data.RunData == null || NGame.Instance == null) return;
+            GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
 
-            // 强行销毁当前关卡残留的根节点
-            var sceneTree = Engine.GetMainLoop() as SceneTree;
-            if (sceneTree != null && sceneTree.Root != null)
-            {
-                var combatRoom = sceneTree.Root.FindChild("NCombatRoom", true, false);
-                if (combatRoom != null) combatRoom.QueueFree();
-
-                var mapScreen = sceneTree.Root.FindChild("NMapScreen", true, false);
-                if (mapScreen != null) mapScreen.QueueFree();
-            }
-
+            // 不加任何 QueueFree，直接反序列化，让原版自己去替换场景
             RunState runState = RunState.FromSerializable(data.RunData);
             
             // 执行原版读档

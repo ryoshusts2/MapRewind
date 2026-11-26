@@ -103,9 +103,9 @@ public static class GlobalUIPatch
         confirmDialog.DialogText = $"确定要回到 [{RewindManager.History[index].NodeName}] 吗？";
         _currentOverlay?.AddChild(confirmDialog);
         confirmDialog.Confirmed += () => {
-            // 【核心修复】必须先用 QueueFree 销毁我们当前的 UI，防止它在读档时崩溃！
+            // 关键：先把自己关掉，然后延迟一帧再去读档，绝对不干扰引擎销毁场景
             _currentOverlay?.QueueFree();
-            RewindManager.RewindTo(index);
+            Callable.From(() => { _ = RewindManager.RewindTo(index); }).CallDeferred();
         };
         confirmDialog.PopupCentered();
     }
