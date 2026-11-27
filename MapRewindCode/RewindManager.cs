@@ -20,7 +20,6 @@ public static class RewindManager
 
     public static List<SnapshotData> History = new();
 
-    // 去掉 room 参数，我们只存纯地图状态
     public static void CaptureSnapshot(int actIndex, int col, int row)
     {
         if (RunManager.Instance == null) return;
@@ -64,13 +63,27 @@ public static class RewindManager
         {
             GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
 
-            // 延迟 200 毫秒，让战斗中残留的 UI 界面彻底死透
+            // ================= 核心修复 =================
+            // 1. 找到当前游戏的主场景（NRun）并彻底销毁它！
+            var sceneTree = Engine.GetMainLoop() as SceneTree;
+            if (sceneTree != null && sceneTree.Root != null)
+            {
+                // 原版的主场景节点通常叫 "NRun"
+                var currentRunScene = sceneTree.Root.GetNodeOrNull("NRun"); 
+                if (currentRunScene != null)
+                {
+                    GD.Print("[MapRewind] 检测到当前有跑团场景，正在强行拆除...");
+                    currentRunScene.QueueFree();
+                }
+            }
+
+            // 2. 等待 200 毫秒，给引擎充足的帧数去释放旧内存和单例
             await Task.Delay(200);
 
+            // 3. 现在场景树是干净的，再让原版去加载新的场景
             RunState runState = RunState.FromSerializable(data.RunData);
             if (runState == null) return;
 
-            // 【核心修复】强制传 null！原版加载地图节点绝不会触发战斗界面的残留崩溃
             await NGame.Instance.LoadRun(runState, null);
             
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
