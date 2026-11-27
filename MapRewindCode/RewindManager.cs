@@ -25,7 +25,6 @@ public static class RewindManager
         if (RunManager.Instance == null) return;
         try
         {
-            // 使用传 null 的纯净地图存档
             SerializableRun snapshot = RunManager.Instance.ToSave(null);
             if (snapshot != null)
             {
@@ -60,37 +59,71 @@ public static class RewindManager
         var data = History[index];
         if (data.RunData == null || NGame.Instance == null) return;
 
+        // ================= 春秋蝉 · 逆流河 =================
+        var canvasLayer = new CanvasLayer();
+        // 带一点深红/墨色的背景，比纯黑更有宿命感
+        var overlay = new ColorRect();
+        overlay.Color = new Color(0.05f, 0.02f, 0.02f, 0.95f); 
+        overlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        overlay.MouseFilter = Control.MouseFilterEnum.Stop;
+        canvasLayer.AddChild(overlay);
+
+        var vbox = new VBoxContainer();
+        vbox.SetAnchorsPreset(Control.LayoutPreset.Center);
+        vbox.Alignment = BoxContainer.AlignmentMode.Center;
+        
+        var poetry = new Label();
+        poetry.Text = "落魄谷中寒风吹，春秋蝉鸣少年归。\n荡魂山处石人泪，定仙游走魔向北。\n逆流河上万仙退，爱情不敌坚持泪。\n宿命天成命中败，仙尊悔而我不悔。";
+        poetry.HorizontalAlignment = HorizontalAlignment.Center;
+        poetry.AddThemeFontSizeOverride("font_size", 32); // 字体放大
+        poetry.AddThemeColorOverride("font_color", new Color(0.85f, 0.8f, 0.75f)); // 微微泛黄的复古色
+        
+        vbox.AddChild(poetry);
+        overlay.AddChild(vbox);
+        
+        NGame.Instance.AddChild(canvasLayer); 
+        
+        // 让文字有一个非常缓慢的淡入效果
+        vbox.Modulate = new Color(1, 1, 1, 0);
+        var tween = NGame.Instance.CreateTween();
+        tween.TweenProperty(vbox, "modulate:a", 1.0f, 1.5f); 
+        
+        // 强制刷新一帧，确保黑屏和诗句立刻盖上去
+        await NGame.Instance.ToSignal(NGame.Instance.GetTree(), SceneTree.SignalName.ProcessFrame);
+
         try
         {
             GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
 
-            // ================= 融合思路：先彻底清场，再重开 =================
-            // 1. 获取当前游戏的主场景树根节点（RootSceneContainer）
-            var rootScene = NGame.Instance.RootSceneContainer;
-            if (rootScene != null && rootScene.CurrentScene != null)
-            {
-                GD.Print("[MapRewind] 正在强行销毁当前游戏主场景...");
-                var current = rootScene.CurrentScene;
-                // 直接把当前跑团节点移出场景树，切断它所有的后台运行逻辑
-                current.GetParent().RemoveChild(current);
-                current.QueueFree();
-            }
+            // 1. 彻底退回主菜单（此时屏幕上全是诗，玩家看不到底层清理报错）
+            await NGame.Instance.ReturnToMainMenu();
+            
+            // 2. 等待 1 秒，给引擎足够的时间去释放旧场景的内存
+            await Task.Delay(1000);
 
-            // 2. 等待 200 毫秒，让 Godot 引擎彻底清理废旧的垃圾内存和渲染资源
-            await Task.Delay(200);
-
-            // 3. 反序列化数据
+            // 3. 加载目标存档
             RunState runState = RunState.FromSerializable(data.RunData);
-            if (runState == null) return;
-
-            // 4. 调用原版读档（它会全新创建一个跑团界面，并且状态与原节点完全一致）
-            await NGame.Instance.LoadRun(runState, null);
-
-            GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
+            if (runState != null)
+            {
+                await NGame.Instance.LoadRun(runState, null);
+                GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
+            }
         }
         catch (System.Exception ex)
         {
             GD.PrintErr($"[MapRewind] 回溯异常: {ex.Message}\n{ex.StackTrace}");
+        }
+        finally
+        {
+            // 4. 停顿 3 秒，让玩家读完诗，然后慢慢淡出遮罩
+            await Task.Delay(3000);
+            var fadeOutTween = NGame.Instance.CreateTween();
+            fadeOutTween.TweenProperty(vbox, "modulate:a", 0.0f, 1.0f);
+            fadeOutTween.TweenProperty(overlay, "color:a", 0.0f, 1.0f);
+            await NGame.Instance.ToSignal(fadeOutTween, Tween.SignalName.Finished);
+            
+            // 5. 彻底移除 UI
+            canvasLayer.QueueFree();
         }
     }
 }

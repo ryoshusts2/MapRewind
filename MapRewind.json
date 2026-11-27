@@ -4,7 +4,7 @@
   "pck_name": "MapRewind",
   "author": "ryoshu, 閆老三",
   "description": "支持单人/多人回溯到地图历史节点。",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "has_pck": false,
   "has_dll": true,
   "affects_gameplay": true,
