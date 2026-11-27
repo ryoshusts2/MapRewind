@@ -40,7 +40,8 @@ public static class GlobalUIPatch
         _currentOverlay = new ColorRect();
         ((ColorRect)_currentOverlay).Color = new Color(0, 0, 0, 0.9f);
         _currentOverlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        
+        _currentOverlay.MouseFilter = Control.MouseFilterEnum.Stop; 
+
         var panel = new PanelContainer();
         panel.SetAnchorsPreset(Control.LayoutPreset.Center);
         panel.CustomMinimumSize = new Vector2(800, 600); 
@@ -90,7 +91,12 @@ public static class GlobalUIPatch
         }
 
         var btnClose = new Button() { Text = "关闭地图" };
-        btnClose.Pressed += () => _currentOverlay?.QueueFree();
+        btnClose.Pressed += () => {
+            if (_currentOverlay != null && GodotObject.IsInstanceValid(_currentOverlay)) {
+                _currentOverlay.QueueFree();
+                _currentOverlay = null;
+            }
+        };
         vbox.AddChild(btnClose);
 
         _currentOverlay.AddChild(panel);
@@ -103,8 +109,10 @@ public static class GlobalUIPatch
         confirmDialog.DialogText = $"确定要回到 [{RewindManager.History[index].NodeName}] 吗？";
         _currentOverlay?.AddChild(confirmDialog);
         confirmDialog.Confirmed += () => {
-            // 关键：先把自己关掉，然后延迟一帧再去读档，绝对不干扰引擎销毁场景
-            _currentOverlay?.QueueFree();
+            if (_currentOverlay != null && GodotObject.IsInstanceValid(_currentOverlay)) {
+                _currentOverlay.QueueFree();
+                _currentOverlay = null;
+            }
             Callable.From(() => { _ = RewindManager.RewindTo(index); }).CallDeferred();
         };
         confirmDialog.PopupCentered();

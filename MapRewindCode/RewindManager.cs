@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Nodes;
+using MegaCrit.Sts2.Core.Combat;
 using Godot;
 
 namespace MapRewind;
@@ -25,6 +26,7 @@ public static class RewindManager
         if (RunManager.Instance == null) return;
         try
         {
+            // 传 null，记录最纯粹的地图节点状态
             SerializableRun snapshot = RunManager.Instance.ToSave(null);
             if (snapshot != null)
             {
@@ -44,7 +46,7 @@ public static class RewindManager
                     Col = col,
                     Row = row
                 });
-                GD.Print($"[MapRewind] 成功记录地图快照: {nodeName}");
+                GD.Print($"[MapRewind] 成功记录节点: {nodeName}");
             }
         }
         catch (System.Exception ex)
@@ -63,27 +65,26 @@ public static class RewindManager
         {
             GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
 
-            // ================= 核心修复 =================
-            // 1. 找到当前游戏的主场景（NRun）并彻底销毁它！
-            var sceneTree = Engine.GetMainLoop() as SceneTree;
-            if (sceneTree != null && sceneTree.Root != null)
+            // 【核心修复】如果正在战斗中，强行解除战斗状态，防止底层读档时跟战斗UI打架
+            if (CombatManager.Instance != null && CombatManager.Instance.IsInProgress)
             {
-                // 原版的主场景节点通常叫 "NRun"
-                var currentRunScene = sceneTree.Root.GetNodeOrNull("NRun"); 
-                if (currentRunScene != null)
+                GD.Print("[MapRewind] 强行中断当前战斗状态...");
+                // 直接调用底层原版的脱战方法（结束战斗），如果没有，就用反射强杀
+                var combatManager = CombatManager.Instance;
+                var prop = combatManager.GetType().GetProperty("IsInProgress");
+                if (prop != null && prop.CanWrite)
                 {
-                    GD.Print("[MapRewind] 检测到当前有跑团场景，正在强行拆除...");
-                    currentRunScene.QueueFree();
+                    prop.SetValue(combatManager, false);
                 }
             }
 
-            // 2. 等待 200 毫秒，给引擎充足的帧数去释放旧内存和单例
-            await Task.Delay(200);
+            // 延迟 300 毫秒让引擎彻底释放旧的战斗UI
+            await Task.Delay(300);
 
-            // 3. 现在场景树是干净的，再让原版去加载新的场景
             RunState runState = RunState.FromSerializable(data.RunData);
             if (runState == null) return;
 
+            // 传 null，安全加载地图节点
             await NGame.Instance.LoadRun(runState, null);
             
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
