@@ -108,63 +108,28 @@ public static class RewindManager
         await NGame.Instance.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
 
         try
-        {
-            GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
-            
-            // 让玩家把诗看完，同时给引擎 3.5 秒时间，让旧场景的动画、特效、UI协程自然停滞
-            await Task.Delay(3500);
+{
+    GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
+    
+    // 让玩家把诗看完，同时给引擎 3 秒时间，让旧场景的动画、特效自然停滞
+    await Task.Delay(3000);
 
-            GD.Print("[MapRewind] 正在执行原版 LoadRun...");
-            RunState runState = RunState.FromSerializable(data.RunData);
-            
-            if (runState != null)
-            {
-                // 【核心修复】不要自己去拆场景。让原版自己处理。
-                // 就算原版因为旧战斗残留报了空指针错误，协程被打断，只要新场景生成出来就行。
-                try { await NGame.Instance.LoadRun(runState, null); } catch { }
-                
-                // 【补漏】如果原版被打断了，新场景没有生成，我们强杀旧的，手动重新生成！
-                var rootScene = NGame.Instance.RootSceneContainer;
-                if (rootScene != null)
-                {
-                    // 等待一帧检查场景是否已经被替换
-                    await NGame.Instance.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
-                    if (rootScene.CurrentScene == null || !rootScene.CurrentScene.Name.ToString().Contains("Run"))
-                    {
-                        GD.Print("[MapRewind] 原版加载被打断，正在强制手动重建场景...");
-                        var newRunNode = NRun.Create(runState);
-                        if (newRunNode != null)
-                        {
-                            // 直接强行替换，不用 RemoveChild，让引擎自己去吞掉旧场景
-                            rootScene.SetCurrentScene(newRunNode);
-                            await RunManager.Instance.GenerateMap();
-                            await RunManager.Instance.LoadIntoLatestMapCoord(null);
-                        }
-                    }
-                }
-                GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
-            }
-        }
-        catch (System.Exception ex)
-        {
-            GD.PrintErr($"[MapRewind] 回溯异常: {ex.Message}\n{ex.StackTrace}");
-        }
-        finally
-        {
-            // 给新地图一点时间渲染出来
-            await Task.Delay(2000);
-            
-            if (GodotObject.IsInstanceValid(overlay))
-            {
-                var fadeOutTween = overlay.CreateTween();
-                fadeOutTween.TweenProperty(overlay, "color:a", 0.0f, 1.5f);
-                await overlay.ToSignal(fadeOutTween, Tween.SignalName.Finished);
-            }
-            
-            if (GodotObject.IsInstanceValid(canvasLayer))
-            {
-                canvasLayer.QueueFree();
-            }
-        }
+    GD.Print("[MapRewind] 正在执行原版 LoadRun...");
+    
+    // 【核心修复】在加载前，强行把当前正在渲染的旧界面隐藏，极大减轻显存瞬间崩溃的压力
+    var rootScene = NGame.Instance.RootSceneContainer;
+    if (rootScene != null && rootScene.CurrentScene != null)
+    {
+        rootScene.CurrentScene.Visible = false;
+    }
+
+    // 给引擎一帧的时间去隐藏渲染
+    await NGame.Instance.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+    RunState runState = RunState.FromSerializable(data.RunData);
+    if (runState != null)
+    {
+        await NGame.Instance.LoadRun(runState, null);
+        GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
     }
 }
