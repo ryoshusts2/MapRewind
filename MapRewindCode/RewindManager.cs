@@ -90,7 +90,7 @@ public static class RewindManager
             label.HorizontalAlignment = HorizontalAlignment.Center;
             label.AddThemeFontSizeOverride("font_size", 64); 
             label.AddThemeColorOverride("font_color", new Color(0.85f, 0.8f, 0.75f));
-            label.Modulate = new Color(1, 1, 1, 0); 
+            label.Modulate = new Color(1, 1, 1, 1); // 直接显示，不用 Tween 防止卡死
             vbox.AddChild(label);
             labels.Add(label);
         }
@@ -98,38 +98,53 @@ public static class RewindManager
         var tree = Engine.GetMainLoop() as SceneTree;
         tree?.Root.AddChild(canvasLayer);
 
-        var tween = NGame.Instance.CreateTween();
-        for (int i = 0; i < labels.Count; i++)
-        {
-            tween.TweenInterval(0.6f);
-            tween.TweenProperty(labels[i], "modulate:a", 1.0f, 0.8f);
-        }
-
-        await NGame.Instance.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
-
         try
-{
-    GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
-    
-    // 让玩家把诗看完，同时给引擎 3 秒时间，让旧场景的动画、特效自然停滞
-    await Task.Delay(3000);
+        {
+            GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
+            
+            // 让玩家把诗看完，同时给底层 3 秒时间清理
+            await Task.Delay(3000);
 
-    GD.Print("[MapRewind] 正在执行原版 LoadRun...");
-    
-    // 【核心修复】在加载前，强行把当前正在渲染的旧界面隐藏，极大减轻显存瞬间崩溃的压力
-    var rootScene = NGame.Instance.RootSceneContainer;
-    if (rootScene != null && rootScene.CurrentScene != null)
-    {
-        rootScene.CurrentScene.Visible = false;
-    }
+            GD.Print("[MapRewind] 正在执行原版 LoadRun...");
+            
+            // 【核心修复】在加载前，强行把当前正在渲染的旧界面隐藏，极大减轻显存瞬间崩溃的压力
+            var rootScene = NGame.Instance.RootSceneContainer;
+            if (rootScene != null && rootScene.CurrentScene != null)
+            {
+                rootScene.CurrentScene.Visible = false;
+            }
 
-    // 给引擎一帧的时间去隐藏渲染
-    await NGame.Instance.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            // 给引擎一帧的时间去隐藏渲染
+            await NGame.Instance.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
 
-    RunState runState = RunState.FromSerializable(data.RunData);
-    if (runState != null)
-    {
-        await NGame.Instance.LoadRun(runState, null);
-        GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
+            RunState runState = RunState.FromSerializable(data.RunData);
+            if (runState != null)
+            {
+                await NGame.Instance.LoadRun(runState, null);
+                GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
+            }
+        }
+        catch (System.Exception ex)
+        {
+            GD.PrintErr($"[MapRewind] 回溯异常: {ex.Message}\n{ex.StackTrace}");
+        }
+        finally
+        {
+            // 【核心突破】不使用任何 Tween 动画。等 2 秒后，直接用定时器强杀遮罩！
+            // 这样不管底层场景树怎么换，都阻止不了遮罩被销毁。
+            if (GodotObject.IsInstanceValid(canvasLayer))
+            {
+                GD.Print("[MapRewind] 正在定时销毁遮罩层...");
+                var timer = tree.CreateTimer(2.0);
+                timer.Timeout += () => 
+                {
+                    if (GodotObject.IsInstanceValid(canvasLayer))
+                    {
+                        canvasLayer.QueueFree();
+                        GD.Print("[MapRewind] 遮罩层已销毁，画面恢复！");
+                    }
+                };
+            }
+        }
     }
 }
