@@ -3,7 +3,6 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Nodes;
-using MegaCrit.Sts2.Core.Rooms;
 using Godot;
 
 namespace MapRewind;
@@ -21,12 +20,13 @@ public static class RewindManager
 
     public static List<SnapshotData> History = new();
 
-    public static void CaptureSnapshot(AbstractRoom room, int actIndex, int col, int row)
+    // 去掉 room 参数，我们只存纯地图状态
+    public static void CaptureSnapshot(int actIndex, int col, int row)
     {
         if (RunManager.Instance == null) return;
         try
         {
-            SerializableRun snapshot = RunManager.Instance.ToSave(room);
+            SerializableRun snapshot = RunManager.Instance.ToSave(null);
             if (snapshot != null)
             {
                 string nodeName = $"第 {actIndex + 1} 层 - 坐标({col}, {row})";
@@ -45,7 +45,7 @@ public static class RewindManager
                     Col = col,
                     Row = row
                 });
-                GD.Print($"[MapRewind] 成功记录: {nodeName}");
+                GD.Print($"[MapRewind] 成功记录地图快照: {nodeName}");
             }
         }
         catch (System.Exception ex)
@@ -64,13 +64,14 @@ public static class RewindManager
         {
             GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
 
-            // 【核心修复】用 C# 自带延迟，给引擎时间去销毁旧界面
-            await Task.Delay(150);
+            // 延迟 200 毫秒，让战斗中残留的 UI 界面彻底死透
+            await Task.Delay(200);
 
             RunState runState = RunState.FromSerializable(data.RunData);
             if (runState == null) return;
 
-            await NGame.Instance.LoadRun(runState, data.RunData.PreFinishedRoom);
+            // 【核心修复】强制传 null！原版加载地图节点绝不会触发战斗界面的残留崩溃
+            await NGame.Instance.LoadRun(runState, null);
             
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
         }

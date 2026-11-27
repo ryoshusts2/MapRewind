@@ -1,31 +1,38 @@
 using HarmonyLib;
-using MegaCrit.Sts2.Core.Rooms;
+using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 using MegaCrit.Sts2.Core.Runs;
 using Godot;
 
 namespace MapRewind;
 
-[HarmonyPatch(typeof(AbstractRoom), "Enter")]
+// 彻底放弃进房间存快照，改成每次回到大地图界面时存
+[HarmonyPatch(typeof(NMapScreen), "_Ready")]
 public static class RewindPatches
 {
     [HarmonyPostfix]
-    public static void Postfix(AbstractRoom __instance, IRunState runState)
+    public static void Postfix()
     {
-        if (__instance == null || runState == null) return;
-
         try
         {
-            var mapCoord = runState.CurrentMapCoord;
-            int col = mapCoord.HasValue ? mapCoord.Value.col : 0;
-            int row = mapCoord.HasValue ? mapCoord.Value.row : 0;
-            int actIndex = runState.CurrentActIndex;
+            if (RunManager.Instance == null) return;
+            
+            // 延迟执行，等大地图UI完全加载完
+            Callable.From(() => {
+                var runState = RunManager.Instance.DebugOnlyGetState();
+                if (runState == null) return;
 
-            // 【核心修复】把当前房间传进去
-            RewindManager.CaptureSnapshot(__instance, actIndex, col, row);
+                var mapCoord = runState.CurrentMapCoord;
+                int col = mapCoord.HasValue ? mapCoord.Value.col : 0;
+                int row = mapCoord.HasValue ? mapCoord.Value.row : 0;
+                int actIndex = runState.CurrentActIndex;
+
+                // 此时传 null，保存的是纯纯的、无战斗的干净地图状态
+                RewindManager.CaptureSnapshot(actIndex, col, row);
+            }).CallDeferred();
         }
         catch (System.Exception ex)
         {
-            GD.PrintErr($"[MapRewind] 抓取坐标失败: {ex.Message}");
+            GD.PrintErr($"[MapRewind] 抓取地图失败: {ex.Message}");
         }
     }
 }
