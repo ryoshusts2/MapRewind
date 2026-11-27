@@ -3,7 +3,6 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Nodes;
-using MegaCrit.Sts2.Core.Combat;
 using Godot;
 
 namespace MapRewind;
@@ -26,7 +25,7 @@ public static class RewindManager
         if (RunManager.Instance == null) return;
         try
         {
-            // 传 null，记录最纯粹的地图节点状态
+            // 使用传 null 的纯净地图存档
             SerializableRun snapshot = RunManager.Instance.ToSave(null);
             if (snapshot != null)
             {
@@ -65,28 +64,28 @@ public static class RewindManager
         {
             GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
 
-            // 【核心修复】如果正在战斗中，强行解除战斗状态，防止底层读档时跟战斗UI打架
-            if (CombatManager.Instance != null && CombatManager.Instance.IsInProgress)
+            // ================= 融合思路：先彻底清场，再重开 =================
+            // 1. 获取当前游戏的主场景树根节点（RootSceneContainer）
+            var rootScene = NGame.Instance.RootSceneContainer;
+            if (rootScene != null && rootScene.CurrentScene != null)
             {
-                GD.Print("[MapRewind] 强行中断当前战斗状态...");
-                // 直接调用底层原版的脱战方法（结束战斗），如果没有，就用反射强杀
-                var combatManager = CombatManager.Instance;
-                var prop = combatManager.GetType().GetProperty("IsInProgress");
-                if (prop != null && prop.CanWrite)
-                {
-                    prop.SetValue(combatManager, false);
-                }
+                GD.Print("[MapRewind] 正在强行销毁当前游戏主场景...");
+                var current = rootScene.CurrentScene;
+                // 直接把当前跑团节点移出场景树，切断它所有的后台运行逻辑
+                current.GetParent().RemoveChild(current);
+                current.QueueFree();
             }
 
-            // 延迟 300 毫秒让引擎彻底释放旧的战斗UI
-            await Task.Delay(300);
+            // 2. 等待 200 毫秒，让 Godot 引擎彻底清理废旧的垃圾内存和渲染资源
+            await Task.Delay(200);
 
+            // 3. 反序列化数据
             RunState runState = RunState.FromSerializable(data.RunData);
             if (runState == null) return;
 
-            // 传 null，安全加载地图节点
+            // 4. 调用原版读档（它会全新创建一个跑团界面，并且状态与原节点完全一致）
             await NGame.Instance.LoadRun(runState, null);
-            
+
             GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
         }
         catch (System.Exception ex)
