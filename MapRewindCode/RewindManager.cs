@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Nodes;
+using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 using Godot;
 
 namespace MapRewind;
@@ -59,7 +60,7 @@ public static class RewindManager
         var data = History[index];
         if (data.RunData == null || NGame.Instance == null) return;
 
-        // 1. 挂载诗句 UI (绝对最高层级，防止被替换场景时误杀)
+        // 1. 创建黑底和绝对居中的诗句
         var canvasLayer = new CanvasLayer();
         var overlay = new ColorRect();
         overlay.Color = new Color(0.05f, 0.02f, 0.02f, 1.0f); 
@@ -67,11 +68,14 @@ public static class RewindManager
         overlay.MouseFilter = Control.MouseFilterEnum.Stop;
         canvasLayer.AddChild(overlay);
 
+        var centerContainer = new CenterContainer();
+        centerContainer.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        overlay.AddChild(centerContainer);
+
         var vbox = new VBoxContainer();
-        vbox.SetAnchorsPreset(Control.LayoutPreset.Center);
         vbox.Alignment = BoxContainer.AlignmentMode.Center;
-        vbox.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
-        
+        centerContainer.AddChild(vbox);
+
         string[] poems = {
             "落魄谷中寒风吹，春秋蝉鸣少年归。",
             "荡魂山处石人泪，定仙游走魔向北。",
@@ -85,45 +89,67 @@ public static class RewindManager
             var label = new Label();
             label.Text = line;
             label.HorizontalAlignment = HorizontalAlignment.Center;
-            label.AddThemeFontSizeOverride("font_size", 48); 
+            label.AddThemeFontSizeOverride("font_size", 64); // 字体加大到 64
             label.AddThemeColorOverride("font_color", new Color(0.85f, 0.8f, 0.75f));
             label.Modulate = new Color(1, 1, 1, 0); 
             vbox.AddChild(label);
             labels.Add(label);
         }
         
-        overlay.AddChild(vbox);
-        
+        // 挂载到 Godot 的最底层根节点，防止被强拆
         var tree = Engine.GetMainLoop() as SceneTree;
         tree?.Root.AddChild(canvasLayer);
 
         var tween = NGame.Instance.CreateTween();
         for (int i = 0; i < labels.Count; i++)
         {
-            tween.TweenInterval(0.5f);
+            tween.TweenInterval(0.6f);
             tween.TweenProperty(labels[i], "modulate:a", 1.0f, 0.8f);
         }
 
-        // 强制刷新一帧，让文字浮现
         await NGame.Instance.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
 
         try
         {
             GD.Print($"[MapRewind] 准备回溯到: {data.NodeName}");
-
-            // 让诗句播一会儿
-            await Task.Delay(3000);
             
-            GD.Print("[MapRewind] 正在强行执行 LoadRun...");
+            // 让玩家把诗看完，给底层 3 秒时间
+            await Task.Delay(3000);
+
+            GD.Print("[MapRewind] 正在强制清理旧场景...");
+            // 【核心突破】彻底把旧的战斗/地图界面从底层拔除
+            var rootScene = NGame.Instance.RootSceneContainer;
+            if (rootScene != null && rootScene.CurrentScene != null)
+            {
+                var currentScene = rootScene.CurrentScene;
+                if (GodotObject.IsInstanceValid(currentScene))
+                {
+                    // 两个连招：移除并释放
+                    currentScene.GetParent().RemoveChild(currentScene);
+                    currentScene.QueueFree();
+                }
+            }
+
+            // 等待一帧，确保 Godot 引擎清理完毕
+            await NGame.Instance.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+            GD.Print("[MapRewind] 正在生成新场景...");
             RunState runState = RunState.FromSerializable(data.RunData);
             
-            if (runState != null && NGame.Instance != null)
+            if (runState != null)
             {
-                // 【核心】不退回主菜单，直接原地强拆并重建！
-                // 原版的 LoadRun 内部会执行 RootSceneContainer.SetCurrentScene，会自动把旧场景吃掉。
-                // 中间那些 Handle is not initialized 报错会被我们的黑屏遮住。
-                await NGame.Instance.LoadRun(runState, null);
-                GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
+                // 【核心突破】不调原版的 LoadRun，直接复刻它的源码逻辑
+                var newRunNode = NRun.Create(runState);
+                if (newRunNode != null)
+                {
+                    rootScene?.SetCurrentScene(newRunNode);
+                    await RunManager.Instance.GenerateMap();
+                    
+                    // 把玩家放到地图的当前坐标，而不是刚才半死不活的房间
+                    await RunManager.Instance.LoadIntoLatestMapCoord(null);
+                    
+                    GD.Print($"[MapRewind] 成功回溯到: {data.NodeName}");
+                }
             }
         }
         catch (System.Exception ex)
@@ -132,8 +158,7 @@ public static class RewindManager
         }
         finally
         {
-            // 等待新场景彻底生成
-            await Task.Delay(1000);
+            await Task.Delay(1500);
             
             if (GodotObject.IsInstanceValid(overlay))
             {
